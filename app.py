@@ -1,4 +1,6 @@
 import streamlit as st
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 from sqlalchemy import create_engine, inspect, text
 import os
 import tempfile
@@ -13,15 +15,18 @@ st.set_page_config(page_title='QueryCraft', page_icon='@', layout='wide')
 st.title("QueryCraft: AI SQL Assistant")
 st.write("Upload a SQLite database and ask questions in natural language")
 
-# API Key Management
-if "GOOGLE_API_KEY" in st.secrets:
-    google_api_key_default = st.secrets["GOOGLE_API_KEY"]
-else:
-    load_dotenv()
-    google_api_key_default = os.getenv("GOOGLE_API_KEY", "")
+# Load environment variables
+load_dotenv(override=True)
 
-if "user_api_key" not in st.session_state:
-    st.session_state.user_api_key = google_api_key_default
+# API Key Management
+google_api_key = os.getenv("GOOGLE_API_KEY", "")
+if not google_api_key:
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            google_api_key = st.secrets["GOOGLE_API_KEY"]
+    except Exception:
+        pass
+
 
 if 'db_engine' not in st.session_state:
     st.session_state.db_engine = None
@@ -132,16 +137,7 @@ with st.sidebar:
             del st.session_state[key]
         st.rerun()
 
-    st.subheader("API Configuration")
-    google_api_key = st.text_input(
-        "Google API Key:",
-        value=st.session_state.user_api_key,
-        type="password",
-        help="Get an API key from Google AI Studio (https://aistudio.google.com/)"
-    )
-    if google_api_key != st.session_state.user_api_key:
-        st.session_state.user_api_key = google_api_key
-        st.session_state.sql_agent = None  # Reset agent if key changes
+
 
     model_option = st.selectbox(
         "Select Gemini Model:",
@@ -285,7 +281,9 @@ with col1:
                             if sql_queries:
                                 with st.expander("🔍 SQL Query Results Table", expanded=True):
                                     try:
-                                        df = pd.read_sql_query(sql_queries[0], st.session_state.db_engine)
+                                        # Execute only the first SQL statement if multiple statements are returned or trailing content exists
+                                        clean_query = sql_queries[0].split(';')[0].strip()
+                                        df = pd.read_sql_query(clean_query, st.session_state.db_engine)
                                         st.dataframe(df, use_container_width=True)
                                     except Exception as e:
                                         st.error(f"Error executing SQL: {e}")
