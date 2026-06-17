@@ -13,8 +13,12 @@ st.set_page_config(page_title='QueryCraft', page_icon='@', layout='wide')
 st.title("QueryCraft: AI SQL Assistant")
 st.write("Upload a SQLite database and ask questions in natural language")
 
-load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# API Key Management
+if "GOOGLE_API_KEY" in st.secrets:
+    google_api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    load_dotenv()
+    google_api_key = os.getenv("GOOGLE_API_KEY")
 
 if 'db_engine' not in st.session_state:
     st.session_state.db_engine = None
