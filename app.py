@@ -141,7 +141,7 @@ with col1:
         # Create agent if it doesn't exist
         if st.session_state.sql_agent is None:
             llm = ChatGoogleGenerativeAI(
-                model="gemini-3.5-flash",
+                model="gemma-4-27b-it",
                 temperature=0,
                 google_api_key=google_api_key
             )
