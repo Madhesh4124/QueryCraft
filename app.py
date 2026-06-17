@@ -106,6 +106,23 @@ with st.sidebar:
             del st.session_state[key]
         st.rerun()
 
+    model_option = st.selectbox(
+        "Select Gemini Model:",
+        ["Gemini 3.5 Flash", "Gemini 1.5 Pro", "Gemini 1.5 Flash"],
+        index=0
+    )
+
+    model_mapping = {
+        "Gemini 3.5 Flash": "gemini-3.5-flash",
+        "Gemini 1.5 Pro": "gemini-1.5-pro",
+        "Gemini 1.5 Flash": "gemini-1.5-flash"
+    }
+    selected_model = model_mapping[model_option]
+
+    if 'selected_model' not in st.session_state or st.session_state.selected_model != selected_model:
+        st.session_state.selected_model = selected_model
+        st.session_state.sql_agent = None
+
     upload_file = st.file_uploader("Upload your SQLite database", type=['db', 'sqlite', 'sqlite3'])
 
     if upload_file is not None:
@@ -141,7 +158,7 @@ with col1:
         # Create agent if it doesn't exist
         if st.session_state.sql_agent is None:
             llm = ChatGoogleGenerativeAI(
-                model="gemma-4-27b-it",
+                model=st.session_state.get('selected_model', 'gemini-3.5-flash'),
                 temperature=0,
                 google_api_key=google_api_key
             )
