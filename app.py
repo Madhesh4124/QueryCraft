@@ -15,10 +15,13 @@ st.write("Upload a SQLite database and ask questions in natural language")
 
 # API Key Management
 if "GOOGLE_API_KEY" in st.secrets:
-    google_api_key = st.secrets["GOOGLE_API_KEY"]
+    google_api_key_default = st.secrets["GOOGLE_API_KEY"]
 else:
     load_dotenv()
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    google_api_key_default = os.getenv("GOOGLE_API_KEY", "")
+
+if "user_api_key" not in st.session_state:
+    st.session_state.user_api_key = google_api_key_default
 
 if 'db_engine' not in st.session_state:
     st.session_state.db_engine = None
@@ -98,6 +101,29 @@ def extract_sql_queries(response):
     
     return unique_queries
 
+def clean_agent_output(output):
+    """Extract and clean plain text from the agent's output."""
+    if isinstance(output, str):
+        return output
+    if isinstance(output, list):
+        text_parts = []
+        for part in output:
+            if isinstance(part, dict):
+                if 'text' in part:
+                    text_parts.append(part['text'])
+                elif part.get('type') == 'text' and 'text' in part:
+                    text_parts.append(part['text'])
+            elif isinstance(part, str):
+                text_parts.append(part)
+        if text_parts:
+            return "\n".join(text_parts)
+    if isinstance(output, dict):
+        if 'text' in output:
+            return output['text']
+        if 'output' in output:
+            return clean_agent_output(output['output'])
+    return str(output)
+
 with st.sidebar:
     st.header("Configuration")
 
@@ -105,6 +131,17 @@ with st.sidebar:
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+
+    st.subheader("API Configuration")
+    google_api_key = st.text_input(
+        "Google API Key:",
+        value=st.session_state.user_api_key,
+        type="password",
+        help="Get an API key from Google AI Studio (https://aistudio.google.com/)"
+    )
+    if google_api_key != st.session_state.user_api_key:
+        st.session_state.user_api_key = google_api_key
+        st.session_state.sql_agent = None  # Reset agent if key changes
 
     model_option = st.selectbox(
         "Select Gemini Model:",
@@ -230,34 +267,28 @@ with col1:
                                 with st.expander("Show Agent's Thought Process"):
                                     st.write(response["intermediate_steps"])
 
+                            # Clean the output first
+                            clean_output = clean_agent_output(response.get("output", ""))
+
                             # Store in chat history with SQL queries
                             chat_entry = {
                                 "question": user_question, 
-                                "answer": response.get("output", ""),
+                                "answer": clean_output,
                                 "sql_queries": sql_queries
                             }
                             st.session_state.chat_history.append(chat_entry)
 
                             st.subheader("📊 Answer:")
-                            output = response.get("output", "")
+                            st.markdown(clean_output)
 
-                            if isinstance(output, pd.DataFrame):
-                                st.dataframe(output, use_container_width=True)
-                            elif isinstance(output, list) and all(isinstance(row, dict) for row in output):
-                                st.dataframe(pd.DataFrame(output), use_container_width=True)
-                            elif isinstance(output, str):
-                                # Try to execute the first SQL query if available
-                                if sql_queries:
+                            # Try to execute the first SQL query if available to show the raw data
+                            if sql_queries:
+                                with st.expander("🔍 SQL Query Results Table", expanded=True):
                                     try:
                                         df = pd.read_sql_query(sql_queries[0], st.session_state.db_engine)
                                         st.dataframe(df, use_container_width=True)
                                     except Exception as e:
                                         st.error(f"Error executing SQL: {e}")
-                                        st.markdown(output)
-                                else:
-                                    st.markdown(output)
-                            else:
-                                st.markdown(str(output))
 
                         except Exception as e:
                             friendly_msg = "❌ Gemini could not answer your question. Please check the database schema or rephrase your query."
